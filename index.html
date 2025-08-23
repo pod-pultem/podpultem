@@ -72,24 +72,41 @@
 
   <script>
     const ACCESS_TOKEN = "shadow2025"; // heslo
-    const PRODUCTS = [
-      {
-        id: "mk-tote-001",
-        name: "Michael Kors Tote – Jet Set",
-        brand: "Michael Kors",
-        priceCZK: 2190,
-        image: "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?q=80&w=1200&auto=format&fit=crop",
-        tags: ["kabelka","dámské","MK"]
-      },
-      {
-        id: "ck-tee-001",
-        name: "Calvin Klein T-Shirt – Monogram",
-        brand: "Calvin Klein",
-        priceCZK: 790,
-        image: "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?q=80&w=1200&auto=format&fit=crop",
-        tags: ["tričko","unisex","CK"]
-      }
+const RAINDROP_COLLECTIONS = {
+  "panska-tricka": "58913469",
+  "mikiny": "58914294"
+  "dámská trička": "58961797"
+      "opasky": "58938633",
+  "kratas": "58913590",
+  "krata­se": "58914666",
+  "bundy": "58914670",
+  "batohy": "58914676",
+  "kosile": "58914776",
+  "svetry": "58915081",
+  "ponozky-tenisky": "58915645",
+  "cestovni-tasky": "58915678",
+  "kalhoty": "58937229",
+  "penezenky": "58939068",
+  "krabice": "58959278",
+  "damske-tricka": "58961797", // už máš
+  "dlouhy-rukav": "58961870",
+  "damske-tricka-dlouhy-rukav": "59011605",
+  "damske-mikiny-svetry": "59011650",
+  "damske-bundy-podzim-jaro": "59011725",
+  "saty": "59020639",
+  "destniky": "59036714",
+  "damske-kratase": "59036804"
     ];
+
+    
+async function loadProductsFromRaindrop(){
+  const ids = Object.values(RAINDROP_COLLECTIONS).join(',');
+  const api = `/api/raindrop?collections=${encodeURIComponent(ids)}&token=${encodeURIComponent(ACCESS_TOKEN)}`;
+  const r = await fetch(api);
+  if (!r.ok) throw new Error('raindrop load failed');
+  const data = await r.json();
+  return data.products || [];
+}
 
     const qs = new URLSearchParams(location.search);
     const token = qs.get('t');
@@ -115,10 +132,21 @@
     const sendWA=document.getElementById('sendWA');
     const copyMsg=document.getElementById('copyMsg');
 
-    let state={q:'',sort:'relevance',items:PRODUCTS,basket:[]};
+    let state = { q:'', sort:'relevance', items: [], basket: [] };
+
     function currency(n){return new Intl.NumberFormat('cs-CZ',{style:'currency',currency:'CZK'}).format(n);}
     function render(){let q=state.q.toLowerCase();let items=state.items.filter(p=>p.name.toLowerCase().includes(q)||p.brand.toLowerCase().includes(q)||p.tags.some(t=>t.toLowerCase().includes(q)));if(state.sort==='priceAsc')items.sort((a,b)=>a.priceCZK-b.priceCZK);if(state.sort==='priceDesc')items.sort((a,b)=>b.priceCZK-a.priceCZK);grid.innerHTML=items.map(p=>`<article class="rounded-2xl overflow-hidden bg-neutral-900 border border-neutral-800 shadow"><div class="aspect-[4/3]"><img src="${p.image}" class="w-full h-full object-cover"/></div><div class="p-4"><div class="text-sm text-neutral-400">${p.brand}</div><h3 class="text-lg font-semibold">${p.name}</h3><div class="flex items-center justify-between pt-1"><span class="font-bold">${currency(p.priceCZK)}</span><button data-id="${p.id}" class="addBtn text-xs px-3 py-1.5 rounded-lg bg-emerald-500/90 hover:bg-emerald-500 text-neutral-900 font-semibold">Přidat</button></div></div></article>`).join('');document.querySelectorAll('.addBtn').forEach(btn=>{btn.onclick=()=>{let id=btn.getAttribute('data-id');let prod=state.items.find(x=>x.id===id);if(!state.basket.find(x=>x.id===id))state.basket.push({...prod,qty:1});basketCount.textContent=String(state.basket.length);};});}
-    render();
+    // Start – načti z Raindropu a pak vyrenderuj
+(async () => {
+  try {
+    state.items = await loadProductsFromRaindrop();
+  } catch (e) {
+    console.warn('Raindrop API spadlo, beru fallback PRODUCTS', e);
+    state.items = []; // žádný fallback, protože už jedeš na Raindrop
+  }
+  render();
+})();
+
     search.oninput=e=>{state.q=e.target.value;render();};
     sort.onchange=e=>{state.sort=e.target.value;render();};
     basketBtn.onclick=()=>{drawer.style.transform='translateY(0)';renderBasket();};
@@ -131,4 +159,5 @@
   </script>
 </body>
 </html>
+
 
