@@ -70,94 +70,187 @@
     </footer>
   </div>
 
-  <script>
-    const ACCESS_TOKEN = "shadow2025"; // heslo
-const RAINDROP_COLLECTIONS = {
-  "panska-tricka": "58913469",
-  "mikiny": "58914294"
-  "dámská trička": "58961797"
-      "opasky": "58938633",
-  "kratas": "58913590",
-  "krata­se": "58914666",
-  "bundy": "58914670",
-  "batohy": "58914676",
-  "kosile": "58914776",
-  "svetry": "58915081",
-  "ponozky-tenisky": "58915645",
-  "cestovni-tasky": "58915678",
-  "kalhoty": "58937229",
-  "penezenky": "58939068",
-  "krabice": "58959278",
-  "damske-tricka": "58961797", // už máš
-  "dlouhy-rukav": "58961870",
-  "damske-tricka-dlouhy-rukav": "59011605",
-  "damske-mikiny-svetry": "59011650",
-  "damske-bundy-podzim-jaro": "59011725",
-  "saty": "59020639",
-  "destniky": "59036714",
-  "damske-kratase": "59036804"
-    ];
+<script>
+  // ====== CONFIG ======
+  const ACCESS_TOKEN = "shadow2025"; // heslo
 
-    
-async function loadProductsFromRaindrop(){
-  const ids = Object.values(RAINDROP_COLLECTIONS).join(',');
-  const api = `/api/raindrop?collections=${encodeURIComponent(ids)}&token=${encodeURIComponent(ACCESS_TOKEN)}`;
-  const r = await fetch(api);
-  if (!r.ok) throw new Error('raindrop load failed');
-  const data = await r.json();
-  return data.products || [];
-}
+  // ID kolekcí z Raindropu (číselné ID z URL /collection/XXXX)
+  const RAINDROP_COLLECTIONS = {
+    "panska-tricka": "58913469",
+    "mikiny": "58914294",
+    "damska-tricka": "58961797",
+    "opasky": "58938633",
+    "kratasy": "58991599",
+    "kratase": "58914666",
+    "bundy": "58914670",
+    "batohy": "58914676",
+    "kosile": "58914766",
+    "svetry": "58915821",
+    "ponozky-tenisky": "58915645",
+    "cestovni-tasky": "58915678",
+    "kalhoty": "58937229",
+    "penezenky": "58930968",
+    "krabice": "58959728",
+    "dlouhy-rukav": "58961878",
+    "damske-tricka-dlouhy-rukav": "59011605",
+    "damske-mikiny-svetry": "59011650",
+    "damske-bundy-podzim-jaro": "59011725",
+    "saty": "59020639",
+    "destniky": "59036714",
+    "damske-kratase": "59036804"
+  };
 
-    const qs = new URLSearchParams(location.search);
-    const token = qs.get('t');
-    const app = document.getElementById('app');
-    const gate = document.getElementById('gate');
-    const passInput = document.getElementById('pass');
-    const enterBtn = document.getElementById('enterBtn');
-    const gateMsg = document.getElementById('gateMsg');
-
-    function allowIn(){ gate.classList.add('hidden'); app.classList.remove('hidden'); }
-    if(token===ACCESS_TOKEN){ allowIn(); } else { gate.classList.remove('hidden'); }
-    enterBtn.addEventListener('click', ()=>{ if(passInput.value.trim()===ACCESS_TOKEN){allowIn();} else {gateMsg.classList.remove('hidden');} });
-
-    const grid=document.getElementById('grid');
-    const search=document.getElementById('search');
-    const sort=document.getElementById('sort');
-    const basketBtn=document.getElementById('basketBtn');
-    const drawer=document.getElementById('drawer');
-    const closeDrawer=document.getElementById('closeDrawer');
-    const basketList=document.getElementById('basketList');
-    const basketCount=document.getElementById('basketCount');
-    const contactField=document.getElementById('contactField');
-    const sendWA=document.getElementById('sendWA');
-    const copyMsg=document.getElementById('copyMsg');
-
-    let state = { q:'', sort:'relevance', items: [], basket: [] };
-
-    function currency(n){return new Intl.NumberFormat('cs-CZ',{style:'currency',currency:'CZK'}).format(n);}
-    function render(){let q=state.q.toLowerCase();let items=state.items.filter(p=>p.name.toLowerCase().includes(q)||p.brand.toLowerCase().includes(q)||p.tags.some(t=>t.toLowerCase().includes(q)));if(state.sort==='priceAsc')items.sort((a,b)=>a.priceCZK-b.priceCZK);if(state.sort==='priceDesc')items.sort((a,b)=>b.priceCZK-a.priceCZK);grid.innerHTML=items.map(p=>`<article class="rounded-2xl overflow-hidden bg-neutral-900 border border-neutral-800 shadow"><div class="aspect-[4/3]"><img src="${p.image}" class="w-full h-full object-cover"/></div><div class="p-4"><div class="text-sm text-neutral-400">${p.brand}</div><h3 class="text-lg font-semibold">${p.name}</h3><div class="flex items-center justify-between pt-1"><span class="font-bold">${currency(p.priceCZK)}</span><button data-id="${p.id}" class="addBtn text-xs px-3 py-1.5 rounded-lg bg-emerald-500/90 hover:bg-emerald-500 text-neutral-900 font-semibold">Přidat</button></div></div></article>`).join('');document.querySelectorAll('.addBtn').forEach(btn=>{btn.onclick=()=>{let id=btn.getAttribute('data-id');let prod=state.items.find(x=>x.id===id);if(!state.basket.find(x=>x.id===id))state.basket.push({...prod,qty:1});basketCount.textContent=String(state.basket.length);};});}
-    // Start – načti z Raindropu a pak vyrenderuj
-(async () => {
-  try {
-    state.items = await loadProductsFromRaindrop();
-  } catch (e) {
-    console.warn('Raindrop API spadlo, beru fallback PRODUCTS', e);
-    state.items = []; // žádný fallback, protože už jedeš na Raindrop
+  // ====== DATA LOADERS ======
+  async function loadProductsFromRaindrop(){
+    const ids = Object.values(RAINDROP_COLLECTIONS).join(',');
+    const api = `/api/raindrop?collections=${encodeURIComponent(ids)}&token=${encodeURIComponent(ACCESS_TOKEN)}`;
+    const r = await fetch(api);
+    if (!r.ok) throw new Error('raindrop load failed');
+    const data = await r.json();
+    return data.products || [];
   }
-  render();
-})();
 
-    search.oninput=e=>{state.q=e.target.value;render();};
-    sort.onchange=e=>{state.sort=e.target.value;render();};
-    basketBtn.onclick=()=>{drawer.style.transform='translateY(0)';renderBasket();};
-    closeDrawer.onclick=()=>{drawer.style.transform='translateY(100%)';};
-    function renderBasket(){if(!state.basket.length){basketList.innerHTML='<div class="text-neutral-400">Košík je prázdný.</div>';return;}basketList.innerHTML=state.basket.map(it=>`<div class="flex items-center gap-3 p-2 rounded-xl bg-neutral-800 border border-neutral-700"><img src="${it.image}" class="w-14 h-14 object-cover rounded-lg"/><div class="flex-1"><div>${it.brand}</div><div>${it.name}</div><div>${currency(it.priceCZK)}</div></div></div>`).join('');}
-    function buildMessage(){const lines=[];lines.push('*Poptávka – PodPultem*');state.basket.forEach(it=>{lines.push(`• ${it.name} (${it.brand}) × ${it.qty} – ${currency(it.priceCZK)}`);});return lines.join('\\n');}
-    sendWA.onclick=()=>{const msg=encodeURIComponent(buildMessage());window.open(`https://wa.me/?text=${msg}`,'_blank');};
-    copyMsg.onclick=async()=>{try{await navigator.clipboard.writeText(buildMessage());copyMsg.textContent='Zkopírováno ✓';setTimeout(()=>copyMsg.textContent='Zkopírovat zprávu',1500);}catch(e){alert('Nepodařilo se zkopírovat.');}};
-    document.getElementById('year').textContent=new Date().getFullYear();
-  </script>
-</body>
-</html>
+  // ====== GATE / ACCESS ======
+  const qs = new URLSearchParams(location.search);
+  const token = qs.get('t');
+  const app = document.getElementById('app');
+  const gate = document.getElementById('gate');
+  const passInput = document.getElementById('pass');
+  const enterBtn = document.getElementById('enterBtn');
+  const gateMsg = document.getElementById('gateMsg');
+
+  function allowIn(){ gate.classList.add('hidden'); app.classList.remove('hidden'); }
+  if (token === ACCESS_TOKEN) { allowIn(); } else { gate.classList.remove('hidden'); }
+  enterBtn.addEventListener('click', ()=>{
+    if (passInput.value.trim() === ACCESS_TOKEN) allowIn();
+    else gateMsg.classList.remove('hidden');
+  });
+
+  // ====== APP STATE & UI ======
+  const grid = document.getElementById('grid');
+  const search = document.getElementById('search');
+  const sort = document.getElementById('sort');
+  const basketBtn = document.getElementById('basketBtn');
+  const drawer = document.getElementById('drawer');
+  const closeDrawer = document.getElementById('closeDrawer');
+  const basketList = document.getElementById('basketList');
+  const basketCount = document.getElementById('basketCount');
+  const contactField = document.getElementById('contactField');
+  const sendWA = document.getElementById('sendWA');
+  const copyMsg = document.getElementById('copyMsg');
+
+  let state = { q: '', sort: 'relevance', items: [], basket: [] };
+
+  function currency(n){
+    return new Intl.NumberFormat('cs-CZ', { style:'currency', currency:'CZK' }).format(n);
+  }
+
+  function render(){
+    const q = state.q.toLowerCase();
+    let items = state.items.filter(p =>
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.brand || '').toLowerCase().includes(q) ||
+      (p.tags || []).some(t => String(t).toLowerCase().includes(q))
+    );
+
+    if (state.sort === 'priceAsc') items.sort((a,b) => (a.priceCZK||Infinity) - (b.priceCZK||Infinity));
+    if (state.sort === 'priceDesc') items.sort((a,b) => (b.priceCZK||-Infinity) - (a.priceCZK||-Infinity));
+    if (state.sort === 'newest') items.sort((a,b) => (String(b.id) > String(a.id) ? 1 : -1));
+
+    grid.innerHTML = items.map(p => {
+      const priceLabel = (Number.isFinite(p.priceCZK)) ? currency(p.priceCZK) : 'Na dotaz';
+      return `
+        <article class="rounded-2xl overflow-hidden bg-neutral-900 border border-neutral-800 shadow">
+          <div class="aspect-[4/3]">
+            <img src="${p.image || ''}" alt="${p.name || ''}" class="w-full h-full object-cover"/>
+          </div>
+          <div class="p-4">
+            <div class="text-sm text-neutral-400">${p.brand || ''}</div>
+            <h3 class="text-lg font-semibold">${p.name || ''}</h3>
+            <div class="flex items-center justify-between pt-1">
+              <span class="font-bold">${priceLabel}</span>
+              <button data-id="${p.id}" class="addBtn text-xs px-3 py-1.5 rounded-lg bg-emerald-500/90 hover:bg-emerald-500 text-neutral-900 font-semibold">
+                Přidat
+              </button>
+            </div>
+          </div>
+        </article>
+      `;
+    }).join('');
+
+    document.querySelectorAll('.addBtn').forEach(btn=>{
+      btn.onclick = () => {
+        const id = btn.getAttribute('data-id');
+        const prod = state.items.find(x => String(x.id) === String(id));
+        if (!prod) return;
+        if (!state.basket.find(x => String(x.id) === String(id))) state.basket.push({ ...prod, qty: 1 });
+        basketCount.textContent = String(state.basket.length);
+      };
+    });
+  }
+
+  // Start – načti z Raindropu a pak vyrenderuj
+  (async () => {
+    try {
+      state.items = await loadProductsFromRaindrop();
+    } catch (e) {
+      console.error('Raindrop API spadlo:', e);
+      state.items = []; // bez pádu UI
+    }
+    render();
+  })();
+
+  // ====== Handlery ======
+  search.oninput  = (e)=>{ state.q = e.target.value; render(); };
+  sort.onchange   = (e)=>{ state.sort = e.target.value; render(); };
+
+  basketBtn.onclick = () => { drawer.style.transform = 'translateY(0)'; renderBasket(); };
+  closeDrawer.onclick = () => { drawer.style.transform = 'translateY(100%)'; };
+
+  function renderBasket(){
+    if (!state.basket.length){
+      basketList.innerHTML = '<div class="text-neutral-400">Košík je prázdný.</div>';
+      return;
+    }
+    basketList.innerHTML = state.basket.map(it => `
+      <div class="flex items-center gap-3 p-2 rounded-xl bg-neutral-800 border border-neutral-700">
+        <img src="${it.image || ''}" class="w-14 h-14 object-cover rounded-lg"/>
+        <div class="flex-1">
+          <div>${it.brand || ''}</div>
+          <div>${it.name || ''}</div>
+          <div>${Number.isFinite(it.priceCZK) ? currency(it.priceCZK) : 'Na dotaz'}</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function buildMessage(){
+    const lines = [];
+    lines.push('*Poptávka – PodPultem*');
+    state.basket.forEach(it=>{
+      const price = Number.isFinite(it.priceCZK) ? currency(it.priceCZK) : 'Na dotaz';
+      lines.push(`• ${it.name} (${it.brand}) × ${it.qty} – ${price}`);
+    });
+    return lines.join('\n');
+  }
+
+  sendWA.onclick = () => {
+    const msg = encodeURIComponent(buildMessage());
+    window.open(`https://wa.me/?text=${msg}`, '_blank');
+  };
+
+  copyMsg.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(buildMessage());
+      copyMsg.textContent = 'Zkopírováno ✓';
+      setTimeout(()=> copyMsg.textContent = 'Zkopírovat zprávu', 1500);
+    } catch {
+      alert('Nepodařilo se zkopírovat.');
+    }
+  };
+
+  document.getElementById('year').textContent = new Date().getFullYear();
+</script>
+
 
 
