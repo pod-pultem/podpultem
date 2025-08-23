@@ -100,15 +100,31 @@
     "damske-kratase": "59036804"
   };
 
-  // ====== DATA LOADERS ======
-  async function loadProductsFromRaindrop(){
-    const ids = Object.values(RAINDROP_COLLECTIONS).join(',');
-    const api = `/api/raindrop?collections=${encodeURIComponent(ids)}&token=${encodeURIComponent(ACCESS_TOKEN)}`;
-    const r = await fetch(api);
-    if (!r.ok) throw new Error('raindrop load failed');
-    const data = await r.json();
-    return data.products || [];
+ // ====== DATA LOADERS ======
+async function loadProductsFromRaindrop(){
+  // bereme kolekce po jedné (spolehlivější) a sloučíme výsledky
+  const ids = Object.values(RAINDROP_COLLECTIONS);
+  const out = [];
+
+  for (const id of ids){
+    try {
+      const url = `/api/raindrop?collections=${encodeURIComponent(id)}&token=${encodeURIComponent(ACCESS_TOKEN)}`;
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`raindrop load failed for ${id}`);
+      const data = await r.json();
+
+      // API může vrátit items NEBO products – podpoříme obě varianty
+      const arr = Array.isArray(data.items) ? data.items :
+                  Array.isArray(data.products) ? data.products : [];
+      out.push(...arr);
+    } catch (e){
+      console.warn('Raindrop load error for', id, e);
+    }
   }
+
+  return out;
+}
+
 
   // ====== GATE / ACCESS ======
   const qs = new URLSearchParams(location.search);
@@ -251,6 +267,7 @@
 
   document.getElementById('year').textContent = new Date().getFullYear();
 </script>
+
 
 
 
