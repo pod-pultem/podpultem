@@ -128,7 +128,7 @@ async function loadProductsFromRaindrop(){
 
   // ====== GATE / ACCESS ======
   const qs = new URLSearchParams(location.search);
-  const token = qs.get('t');
+  const token = qs.get('t') || sessionStorage.getItem('ppt_token');
   const app = document.getElementById('app');
   const gate = document.getElementById('gate');
   const passInput = document.getElementById('pass');
@@ -138,9 +138,12 @@ async function loadProductsFromRaindrop(){
   function allowIn(){ gate.classList.add('hidden'); app.classList.remove('hidden'); }
   if (token === ACCESS_TOKEN) { allowIn(); } else { gate.classList.remove('hidden'); }
   enterBtn.addEventListener('click', ()=>{
-    if (passInput.value.trim() === ACCESS_TOKEN) allowIn();
-    else gateMsg.classList.remove('hidden');
+    if (passInput.value.trim() === ACCESS_TOKEN){
+      sessionStorage.setItem('ppt_token', ACCESS_TOKEN);
+      allowIn();
+    } else gateMsg.classList.remove('hidden');
   });
+  passInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') enterBtn.click(); });
 
   // ====== APP STATE & UI ======
   const grid = document.getElementById('grid');
@@ -178,7 +181,7 @@ async function loadProductsFromRaindrop(){
       return `
         <article class="rounded-2xl overflow-hidden bg-neutral-900 border border-neutral-800 shadow">
           <div class="aspect-[4/3]">
-            <img src="${p.image || ''}" alt="${p.name || ''}" class="w-full h-full object-cover"/>
+            <img src="${p.image || ''}" alt="${p.name || ''}" loading="lazy" class="w-full h-full object-cover"/>
           </div>
           <div class="p-4">
             <div class="text-sm text-neutral-400">${p.brand || ''}</div>
@@ -230,7 +233,7 @@ async function loadProductsFromRaindrop(){
     }
     basketList.innerHTML = state.basket.map(it => `
       <div class="flex items-center gap-3 p-2 rounded-xl bg-neutral-800 border border-neutral-700">
-        <img src="${it.image || ''}" class="w-14 h-14 object-cover rounded-lg"/>
+        <img src="${it.image || ''}" class="w-14 h-14 object-cover rounded-lg" loading="lazy"/>
         <div class="flex-1">
           <div>${it.brand || ''}</div>
           <div>${it.name || ''}</div>
@@ -243,9 +246,12 @@ async function loadProductsFromRaindrop(){
   function buildMessage(){
     const lines = [];
     lines.push('*Poptávka – PodPultem*');
+    const contact = (contactField.value || '').trim();
+    if (contact) lines.push(`Kontakt: ${contact}`);
     state.basket.forEach(it=>{
       const price = Number.isFinite(it.priceCZK) ? currency(it.priceCZK) : 'Na dotaz';
       lines.push(`• ${it.name} (${it.brand}) × ${it.qty} – ${price}`);
+      if (it.url) lines.push(`   ${it.url}`);
     });
     return lines.join('\n');
   }
@@ -267,6 +273,9 @@ async function loadProductsFromRaindrop(){
 
   document.getElementById('year').textContent = new Date().getFullYear();
 </script>
+</body>
+</html>
+
 
 
 
