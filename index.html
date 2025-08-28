@@ -65,6 +65,40 @@
       </div>
     </div>
 
+    <!-- DETAIL MODAL -->
+    <div id="detail" class="fixed inset-0 bg-black/70 hidden items-center justify-center p-4">
+      <div class="w-full max-w-5xl bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden shadow-2xl">
+        <div class="flex items-center justify-between p-4 border-b border-neutral-800">
+          <h3 id="dTitle" class="text-xl font-semibold">Detail</h3>
+          <button id="dClose" class="px-3 py-1 rounded-xl bg-white/10 hover:bg-white/20">Zavřít</button>
+        </div>
+        <div class="grid md:grid-cols-2 gap-0">
+          <div class="p-4 space-y-3 border-r border-neutral-800">
+            <img id="dImage" class="w-full aspect-square object-cover rounded-xl" alt=""/>
+            <div id="dThumbs" class="flex gap-2 overflow-x-auto"></div>
+          </div>
+          <div class="p-4 space-y-3">
+            <div class="text-neutral-400" id="dBrand"></div>
+            <div class="text-2xl font-bold" id="dName"></div>
+            <div class="text-lg" id="dPrice"></div>
+
+            <div class="flex items-center gap-2">
+              <label for="dSize" class="text-sm text-neutral-400">Velikost</label>
+              <select id="dSize" class="px-3 py-2 rounded-xl bg-neutral-800 border border-neutral-700"></select>
+              <button id="dAdd" class="ml-auto px-4 py-2 rounded-xl bg-emerald-500/90 hover:bg-emerald-500 text-neutral-900 font-semibold">Přidat do košíku</button>
+            </div>
+
+            <div class="text-sm text-neutral-400">Zdroj: <a id="dUrl" href="#" target="_blank" class="underline">Odkaz na produkt</a></div>
+
+            <div>
+              <h4 class="font-semibold mb-1">Tabulka velikostí</h4>
+              <div id="dSizesTbl" class="text-sm overflow-x-auto border border-neutral-800 rounded-xl"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <footer class="mt-10 text-center text-neutral-500 text-sm">
       © <span id="year"></span> PodPultem • Neveřejný katalog • Vytvořeno s ♥️
     </footer>
@@ -73,6 +107,10 @@
 <script>
   // ====== CONFIG ======
   const ACCESS_TOKEN = "shadow2025"; // heslo
+
+  // Přepočet ceny: ¥ → Kč × marže (+ případná doprava)
+  const FX = { CNY_TO_CZK: 3.2, MARKUP: 1.6, SHIPPING_CZK: 0 }; // uprav dle potřeby
+  const priceFromCNY = (cny) => Math.round((Number(cny||0) * FX.CNY_TO_CZK * FX.MARKUP + FX.SHIPPING_CZK) / 10) * 10;
 
   // ID kolekcí z Raindropu (číselné ID z URL /collection/XXXX)
   const RAINDROP_COLLECTIONS = {
@@ -100,49 +138,44 @@
     "damske-kratase": "59036804"
   };
 
- // ====== DATA LOADERS ======
-async function loadProductsFromRaindrop(){
-  // bereme kolekce po jedné (spolehlivější) a sloučíme výsledky
-  const ids = Object.values(RAINDROP_COLLECTIONS);
-  const out = [];
+  // ====== HELPERS ======
+  const qs = new URLSearchParams(location.search);
+  const fetchJSON = async (url) => { try { const r = await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status); return await r.json(); } catch(e){ console.warn('fetchJSON', url, e); return null; } };
+  const currency = (n)=> new Intl.NumberFormat('cs-CZ', { style:'currency', currency:'CZK' }).format(n);
 
-  for (const id of ids){
-    try {
-      const url = `/api/raindrop?collections=${encodeURIComponent(id)}&token=${encodeURIComponent(ACCESS_TOKEN)}`;
-      const r = await fetch(url);
-      if (!r.ok) throw new Error(`raindrop load failed for ${id}`);
-      const data = await r.json();
-
-      // API může vrátit items NEBO products – podpoříme obě varianty
-      const arr = Array.isArray(data.items) ? data.items :
-                  Array.isArray(data.products) ? data.products : [];
-      out.push(...arr);
-    } catch (e){
-      console.warn('Raindrop load error for', id, e);
-    }
+  // Normalizace produktu z různých zdrojů
+  function normalize(p){
+    const images = Array.isArray(p.images) && p.images.length ? p.images : (p.image ? [p.image] : []);
+    const url = p.url || p.link || p.source || null;
+    const priceCNY = Number(p.priceCNY ?? p.price_yuan ?? p.price_cny ?? p.cny ?? 0) || null;
+    const priceCZK = Number.isFinite(p.priceCZK) ? p.priceCZK : (priceCNY ? priceFromCNY(priceCNY) : null);
+    const sizes = Array.isArray(p.sizes) ? p.sizes : [];
+    const id = p.id || p._id || (url ? btoa(url).slice(0,10) : Math.random().toString(36).slice(2));
+    return { id, name: p.name||p.title||'', brand: p.brand||'', tags: p.tags||[], images, image: images[0]||'', url, priceCNY, priceCZK, sizes, sizeTableUrl: p.sizeTableUrl||p.sizesUrl||null };
   }
 
-  return out;
-}
-
+  // ====== DATA LOADERS ======
+  async function loadProductsFromRaindrop(){
+    const ids = Object.values(RAINDROP_COLLECTIONS);
+    const out = [];
+    for (const id of ids){
+      const data = await fetchJSON(`/api/raindrop?collections=${encodeURIComponent(id)}&token=${encodeURIComponent(ACCESS_TOKEN)}`);
+      const arr = Array.isArray(data?.items) ? data.items : Array.isArray(data?.products) ? data.products : [];
+      for (const raw of arr) out.push(normalize(raw));
+    }
+    return out;
+  }
 
   // ====== GATE / ACCESS ======
-  const qs = new URLSearchParams(location.search);
   const token = qs.get('t') || sessionStorage.getItem('ppt_token');
   const app = document.getElementById('app');
   const gate = document.getElementById('gate');
   const passInput = document.getElementById('pass');
   const enterBtn = document.getElementById('enterBtn');
   const gateMsg = document.getElementById('gateMsg');
-
   function allowIn(){ gate.classList.add('hidden'); app.classList.remove('hidden'); }
   if (token === ACCESS_TOKEN) { allowIn(); } else { gate.classList.remove('hidden'); }
-  enterBtn.addEventListener('click', ()=>{
-    if (passInput.value.trim() === ACCESS_TOKEN){
-      sessionStorage.setItem('ppt_token', ACCESS_TOKEN);
-      allowIn();
-    } else gateMsg.classList.remove('hidden');
-  });
+  enterBtn.addEventListener('click', ()=>{ if (passInput.value.trim() === ACCESS_TOKEN){ sessionStorage.setItem('ppt_token', ACCESS_TOKEN); allowIn(); } else gateMsg.classList.remove('hidden'); });
   passInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') enterBtn.click(); });
 
   // ====== APP STATE & UI ======
@@ -158,11 +191,21 @@ async function loadProductsFromRaindrop(){
   const sendWA = document.getElementById('sendWA');
   const copyMsg = document.getElementById('copyMsg');
 
-  let state = { q: '', sort: 'relevance', items: [], basket: [] };
+  // detail modal
+  const detail = document.getElementById('detail');
+  const dClose = document.getElementById('dClose');
+  const dTitle = document.getElementById('dTitle');
+  const dBrand = document.getElementById('dBrand');
+  const dName = document.getElementById('dName');
+  const dPrice = document.getElementById('dPrice');
+  const dImage = document.getElementById('dImage');
+  const dThumbs = document.getElementById('dThumbs');
+  const dUrl = document.getElementById('dUrl');
+  const dSize = document.getElementById('dSize');
+  const dAdd = document.getElementById('dAdd');
+  const dSizesTbl = document.getElementById('dSizesTbl');
 
-  function currency(n){
-    return new Intl.NumberFormat('cs-CZ', { style:'currency', currency:'CZK' }).format(n);
-  }
+  let state = { q: '', sort: 'relevance', items: [], basket: [], current: null };
 
   function render(){
     const q = state.q.toLowerCase();
@@ -172,59 +215,93 @@ async function loadProductsFromRaindrop(){
       (p.tags || []).some(t => String(t).toLowerCase().includes(q))
     );
 
-    if (state.sort === 'priceAsc') items.sort((a,b) => (a.priceCZK||Infinity) - (b.priceCZK||Infinity));
-    if (state.sort === 'priceDesc') items.sort((a,b) => (b.priceCZK||-Infinity) - (a.priceCZK||-Infinity));
+    if (state.sort === 'priceAsc') items.sort((a,b) => (a.priceCZK??Infinity) - (b.priceCZK??Infinity));
+    if (state.sort === 'priceDesc') items.sort((a,b) => (b.priceCZK??-Infinity) - (a.priceCZK??-Infinity));
     if (state.sort === 'newest') items.sort((a,b) => (String(b.id) > String(a.id) ? 1 : -1));
 
-    grid.innerHTML = items.map(p => {
-      const priceLabel = (Number.isFinite(p.priceCZK)) ? currency(p.priceCZK) : 'Na dotaz';
-      return `
-        <article class="rounded-2xl overflow-hidden bg-neutral-900 border border-neutral-800 shadow">
-          <div class="aspect-[4/3]">
-            <img src="${p.image || ''}" alt="${p.name || ''}" loading="lazy" class="w-full h-full object-cover"/>
-          </div>
-          <div class="p-4">
-            <div class="text-sm text-neutral-400">${p.brand || ''}</div>
-            <h3 class="text-lg font-semibold">${p.name || ''}</h3>
-            <div class="flex items-center justify-between pt-1">
-              <span class="font-bold">${priceLabel}</span>
-              <button data-id="${p.id}" class="addBtn text-xs px-3 py-1.5 rounded-lg bg-emerald-500/90 hover:bg-emerald-500 text-neutral-900 font-semibold">
-                Přidat
-              </button>
+    grid.innerHTML = items.map(p => `
+      <article class="rounded-2xl overflow-hidden bg-neutral-900 border border-neutral-800 shadow">
+        <button class="w-full text-left" data-detail="${p.id}">
+          <div class="aspect-[4/3]"><img src="${p.image}" alt="${p.name}" loading="lazy" class="w-full h-full object-cover"/></div>
+        </button>
+        <div class="p-4">
+          <div class="text-sm text-neutral-400">${p.brand || ''}</div>
+          <h3 class="text-lg font-semibold">${p.name || ''}</h3>
+          <div class="flex items-center justify-between pt-1">
+            <span class="font-bold">${Number.isFinite(p.priceCZK)?currency(p.priceCZK):'Na dotaz'}</span>
+            <div class="flex gap-2">
+              <button data-id="${p.id}" class="addBtn text-xs px-3 py-1.5 rounded-lg bg-emerald-500/90 hover:bg-emerald-500 text-neutral-900 font-semibold">Přidat</button>
+              <button data-detail="${p.id}" class="text-xs px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20">Detail</button>
             </div>
           </div>
-        </article>
-      `;
-    }).join('');
+        </div>
+      </article>
+    `).join('');
 
-    document.querySelectorAll('.addBtn').forEach(btn=>{
-      btn.onclick = () => {
-        const id = btn.getAttribute('data-id');
-        const prod = state.items.find(x => String(x.id) === String(id));
-        if (!prod) return;
-        if (!state.basket.find(x => String(x.id) === String(id))) state.basket.push({ ...prod, qty: 1 });
-        basketCount.textContent = String(state.basket.length);
-      };
+    // add handlers
+    grid.querySelectorAll('.addBtn').forEach(btn=>{
+      btn.onclick = () => { const id = btn.getAttribute('data-id'); addToBasket(id); };
+    });
+    grid.querySelectorAll('[data-detail]').forEach(el=>{
+      el.onclick = () => { const id = el.getAttribute('data-detail'); openDetail(id); };
     });
   }
 
-  // Start – načti z Raindropu a pak vyrenderuj
-  (async () => {
-    try {
-      state.items = await loadProductsFromRaindrop();
-    } catch (e) {
-      console.error('Raindrop API spadlo:', e);
-      state.items = []; // bez pádu UI
+  function addToBasket(id, chosenSize){
+    const prod = state.items.find(x => String(x.id) === String(id));
+    if (!prod) return;
+    const key = id + (chosenSize?`@${chosenSize}`:'');
+    if (!state.basket.find(x => x.key===key)) state.basket.push({ key, ...prod, size: chosenSize||null, qty: 1 });
+    basketCount.textContent = String(state.basket.length);
+    renderBasket();
+  }
+
+  async function openDetail(id){
+    const p = state.items.find(x => String(x.id) === String(id));
+    if (!p) return;
+    state.current = p;
+    dBrand.textContent = p.brand || '';
+    dName.textContent = p.name || '';
+    dTitle.textContent = p.name || 'Detail';
+    dPrice.textContent = Number.isFinite(p.priceCZK)?currency(p.priceCZK):'Na dotaz';
+    dUrl.href = p.url || '#';
+
+    // gallery
+    const imgs = p.images && p.images.length ? p.images : (p.image?[p.image]:[]);
+    dImage.src = imgs[0] || '';
+    dThumbs.innerHTML = imgs.map((src,i)=>`<img src="${src}" class="w-16 h-16 object-cover rounded-lg cursor-pointer border border-neutral-800" data-img="${i}">`).join('');
+    dThumbs.querySelectorAll('[data-img]').forEach(t=> t.onclick = ()=>{ dImage.src = imgs[Number(t.getAttribute('data-img'))]; });
+
+    // sizes select
+    dSize.innerHTML = (p.sizes && p.sizes.length ? p.sizes : ['XS','S','M','L','XL']).map(s=>`<option>${s}</option>`).join('');
+
+    // size table fetch
+    dSizesTbl.innerHTML = '<div class="p-3 text-neutral-400">Načítám…</div>';
+    const srcForSizes = p.sizeTableUrl || p.url;
+    if (srcForSizes){
+      const res = await fetchJSON(`/api/sizechart?url=${encodeURIComponent(srcForSizes)}&token=${encodeURIComponent(ACCESS_TOKEN)}`);
+      if (res?.html){
+        dSizesTbl.innerHTML = res.html; // očekáváme serverem očištěné <table>
+      } else if (Array.isArray(res?.rows)) {
+        // fallback z JSONu
+        const head = res.headers || [];
+        const rows = res.rows || [];
+        const th = head.map(h=>`<th class="px-2 py-1 border border-neutral-800">${h}</th>`).join('');
+        const tr = rows.map(r=>`<tr>${r.map(c=>`<td class=\"px-2 py-1 border border-neutral-800\">${c}</td>`).join('')}</tr>`).join('');
+        dSizesTbl.innerHTML = `<table class="min-w-full text-left">${head.length?`<thead><tr>${th}</tr></thead>`:''}<tbody>${tr}</tbody></table>`;
+      } else {
+        dSizesTbl.innerHTML = '<div class="p-3 text-neutral-400">Tabulka nedostupná.</div>';
+      }
+    } else {
+      dSizesTbl.innerHTML = '<div class="p-3 text-neutral-400">Tabulka nedostupná.</div>';
     }
-    render();
-  })();
 
-  // ====== Handlery ======
-  search.oninput  = (e)=>{ state.q = e.target.value; render(); };
-  sort.onchange   = (e)=>{ state.sort = e.target.value; render(); };
+    detail.classList.remove('hidden');
+    detail.classList.add('flex');
+  }
 
-  basketBtn.onclick = () => { drawer.style.transform = 'translateY(0)'; renderBasket(); };
-  closeDrawer.onclick = () => { drawer.style.transform = 'translateY(100%)'; };
+  dClose.onclick = () => { detail.classList.add('hidden'); detail.classList.remove('flex'); };
+  dAdd.onclick = () => { if (!state.current) return; addToBasket(state.current.id, dSize.value); };
 
   function renderBasket(){
     if (!state.basket.length){
@@ -235,8 +312,8 @@ async function loadProductsFromRaindrop(){
       <div class="flex items-center gap-3 p-2 rounded-xl bg-neutral-800 border border-neutral-700">
         <img src="${it.image || ''}" class="w-14 h-14 object-cover rounded-lg" loading="lazy"/>
         <div class="flex-1">
-          <div>${it.brand || ''}</div>
-          <div>${it.name || ''}</div>
+          <div class="text-sm text-neutral-400">${it.brand || ''}</div>
+          <div>${it.name || ''}${it.size?` • ${it.size}`:''}</div>
           <div>${Number.isFinite(it.priceCZK) ? currency(it.priceCZK) : 'Na dotaz'}</div>
         </div>
       </div>
@@ -250,26 +327,29 @@ async function loadProductsFromRaindrop(){
     if (contact) lines.push(`Kontakt: ${contact}`);
     state.basket.forEach(it=>{
       const price = Number.isFinite(it.priceCZK) ? currency(it.priceCZK) : 'Na dotaz';
-      lines.push(`• ${it.name} (${it.brand}) × ${it.qty} – ${price}`);
+      lines.push(`• ${it.name} (${it.brand}) ${it.size?`[${it.size}]`:''} × ${it.qty} – ${price}`);
       if (it.url) lines.push(`   ${it.url}`);
     });
-    return lines.join('\n');
+    return lines.join('
+');
   }
 
-  sendWA.onclick = () => {
-    const msg = encodeURIComponent(buildMessage());
-    window.open(`https://wa.me/?text=${msg}`, '_blank');
-  };
+  // Start – načti z Raindropu a pak vyrenderuj
+  (async () => {
+    try { state.items = await loadProductsFromRaindrop(); }
+    catch (e) { console.error('Raindrop API spadlo:', e); state.items = []; }
+    render();
+  })();
 
-  copyMsg.onclick = async () => {
-    try {
-      await navigator.clipboard.writeText(buildMessage());
-      copyMsg.textContent = 'Zkopírováno ✓';
-      setTimeout(()=> copyMsg.textContent = 'Zkopírovat zprávu', 1500);
-    } catch {
-      alert('Nepodařilo se zkopírovat.');
-    }
-  };
+  // ====== Handlery ======
+  search.oninput  = (e)=>{ state.q = e.target.value; render(); };
+  sort.onchange   = (e)=>{ state.sort = e.target.value; render(); };
+
+  basketBtn.onclick = () => { drawer.style.transform = 'translateY(0)'; renderBasket(); };
+  closeDrawer.onclick = () => { drawer.style.transform = 'translateY(100%)'; };
+
+  sendWA.onclick = () => { const msg = encodeURIComponent(buildMessage()); window.open(`https://wa.me/?text=${msg}`, '_blank'); };
+  copyMsg.onclick = async () => { try { await navigator.clipboard.writeText(buildMessage()); copyMsg.textContent = 'Zkopírováno ✓'; setTimeout(()=> copyMsg.textContent = 'Zkopírovat zprávu', 1500); } catch { alert('Nepodařilo se zkopírovat.'); } };
 
   document.getElementById('year').textContent = new Date().getFullYear();
 </script>
